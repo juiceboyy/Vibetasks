@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VibeFlow | Edit Edition</title>
+    <title>VibeFlow | Progress Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -22,19 +22,32 @@
         .task-wrapper { position: relative; overflow: hidden; border-radius: 1rem; margin-bottom: 0.75rem; touch-action: pan-y; }
         .delete-bg { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: #ef4444; display: flex; align-items: center; justify-content: flex-end; padding-right: 1.5rem; z-index: 0; }
         .task-content { position: relative; z-index: 10; background: white; transition: transform 0.1s linear; }
+
+        /* Progress Bar Transition */
+        #progress-fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 </head>
-<body class="flex flex-col items-center min-h-screen text-slate-900 pt-12 px-6">
+<body class="flex flex-col items-center min-h-screen text-slate-900 pt-10 px-6">
 
     <div class="w-full max-w-md relative pb-32">
-        <header class="flex items-center justify-between mb-8">
-            <div>
-                <h1 class="text-3xl font-bold tracking-tight text-slate-800">Tasks</h1>
-                <p class="text-slate-500 font-medium mt-1" id="date-display">Today</p>
+        <header class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight text-slate-800">Tasks</h1>
+                    <p class="text-slate-500 font-medium mt-1" id="date-display">Today</p>
+                </div>
+                <button onclick="toggleInput()" class="p-3 bg-slate-900 rounded-full shadow-lg shadow-slate-200 active:scale-95 transition-transform">
+                    <i data-lucide="plus" class="w-6 h-6 text-white"></i>
+                </button>
             </div>
-            <button onclick="toggleInput()" class="p-3 bg-slate-900 rounded-full shadow-lg shadow-slate-200 active:scale-95 transition-transform">
-                <i data-lucide="plus" class="w-6 h-6 text-white"></i>
-            </button>
+
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div id="progress-fill" class="bg-blue-500 h-1.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between mt-2 text-xs font-medium text-slate-400">
+                <span id="progress-text">0% Complete</span>
+                <span id="task-count">0 Tasks</span>
+            </div>
         </header>
 
         <div id="input-area" class="hidden mb-6 animate-enter">
@@ -56,9 +69,9 @@
     </div>
 
     <script>
-        // Data Store
-        let tasks = [
-            { id: 1, text: "Tap this text to edit it", completed: false },
+        // Data Store with LocalStorage
+        let tasks = JSON.parse(localStorage.getItem('vibeTasks')) || [
+            { id: 1, text: "Tap text to edit", completed: false },
             { id: 2, text: "Swipe left to delete", completed: false }
         ];
 
@@ -104,53 +117,44 @@
 
         function editTask(id) {
             const task = tasks.find(t => t.id === id);
-            if (!task || task.completed) return; // Prevent editing completed tasks
+            if (!task || task.completed) return; 
 
             const textElement = document.getElementById(`text-${id}`);
             const currentText = task.text;
 
-            // Replace text with input
             textElement.innerHTML = `
                 <input type="text" id="edit-${id}" value="${currentText}" 
                 class="w-full bg-transparent border-b-2 border-blue-500 outline-none text-lg text-slate-800 p-0 m-0"
                 onblur="saveEdit(${id})" onkeypress="handleEditEnter(event, ${id})">
             `;
 
-            // Focus the new input immediately
             const input = document.getElementById(`edit-${id}`);
             input.focus();
         }
 
         function saveEdit(id) {
             const input = document.getElementById(`edit-${id}`);
-            if (!input) return; // Already saved/removed
+            if (!input) return;
 
             const newText = input.value.trim();
             const task = tasks.find(t => t.id === id);
 
             if (newText && task) {
                 task.text = newText;
-            } else if (task) {
-                // If empty, revert to old text or delete? Let's revert.
-                // Or you could delete: deleteTask(id);
             }
             renderTasks();
         }
 
         function handleEditEnter(e, id) {
-            if (e.key === 'Enter') {
-                document.getElementById(`edit-${id}`).blur(); // Triggers saveEdit via onblur
-            }
+            if (e.key === 'Enter') document.getElementById(`edit-${id}`).blur();
         }
 
-        // --- Swipe Logic (Modified to ignore inputs) ---
+        // --- Swipe Logic ---
         let startX = 0;
         let currentSwipedElement = null;
 
         function touchStart(e, id) {
-            // Don't swipe if we are tapping an input (editing)
             if (e.target.tagName === 'INPUT') return;
-
             startX = e.touches[0].clientX;
             currentSwipedElement = document.getElementById(`content-${id}`);
             currentSwipedElement.style.transition = 'none';
@@ -179,9 +183,23 @@
             currentSwipedElement = null;
         }
 
-        // --- Render ---
+        // --- Render & Progress ---
+
+        function updateProgress() {
+            const total = tasks.length;
+            const completed = tasks.filter(t => t.completed).length;
+            const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+            
+            document.getElementById('progress-fill').style.width = `${percent}%`;
+            document.getElementById('progress-text').innerText = `${percent}% Complete`;
+            document.getElementById('task-count').innerText = `${total} Tasks`;
+        }
 
         function renderTasks() {
+            // Save to LocalStorage
+            localStorage.setItem('vibeTasks', JSON.stringify(tasks));
+            updateProgress();
+
             const list = document.getElementById('task-list');
             const empty = document.getElementById('empty-state');
             list.innerHTML = '';
